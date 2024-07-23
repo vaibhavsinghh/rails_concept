@@ -1,0 +1,147 @@
+Sure! Let's take each example one by one and explain how `join` and `includes` behave in different scenarios.
+
+### `joins`
+
+The `joins` method is used to perform SQL `JOIN` operations. It is typically used for filtering records based on conditions from associated tables. However, it does not load the associated objects into memory.
+
+#### Example 1: Basic Join
+
+Suppose you have two models: `User` and `Post`, where a user has many posts.
+
+```ruby
+class User < ApplicationRecord
+  has_many :posts
+end
+
+class Post < ApplicationRecord
+  belongs_to :user
+end
+```
+
+**Query: Find users who have published posts.**
+
+```ruby
+User.joins(:posts).where(posts: { published: true })
+```
+
+**Generated SQL:**
+
+```sql
+SELECT users.*
+FROM users
+INNER JOIN posts ON posts.user_id = users.id
+WHERE posts.published = true
+```
+
+- **Behavior**: This query will return users who have at least one post that is published. It performs an inner join between `users` and `posts` and filters based on the `published` column of the `posts` table.
+- **Note**: The `posts` association is not loaded into memory. If you access `user.posts`, it will trigger a separate query.
+
+#### Example 2: Join with Select
+
+**Query: Find users with their post titles.**
+
+```ruby
+User.joins(:posts).select('users.*, posts.title as post_title')
+```
+
+**Generated SQL:**
+
+```sql
+SELECT users.*, posts.title as post_title
+FROM users
+INNER JOIN posts ON posts.user_id = users.id
+```
+
+- **Behavior**: This query joins `users` and `posts` and selects all user attributes along with the post titles. The result will include an additional attribute `post_title` for each user.
+- **Note**: As before, the `posts` association is not loaded into memory.
+
+### `includes`
+
+The `includes` method is used for eager loading associations to avoid the N+1 query problem. It loads the associated objects into memory with additional queries.
+
+#### Example 1: Basic Includes
+
+**Query: Find users and their posts.**
+
+```ruby
+User.includes(:posts).where(posts: { published: true })
+```
+
+**Generated SQL:**
+
+```sql
+SELECT users.*
+FROM users
+
+SELECT posts.*
+FROM posts
+WHERE posts.user_id IN (list_of_user_ids)
+```
+
+- **Behavior**: This query performs two SQL queries: one to load users and another to load their posts. Rails then combines these results in memory. This avoids additional queries when accessing `user.posts`.
+- **Note**: The `posts` association is loaded into memory, so accessing `user.posts` does not trigger a new query.
+
+#### Example 2: Includes with Conditions
+
+**Query: Find users who have published posts.**
+
+```ruby
+User.includes(:posts).where(posts: { published: true })
+```
+
+- **Behavior**: Similar to the previous example, but with a condition on the `posts` table. The users and posts are both loaded, and Rails filters the results to include only those users with published posts.
+- **Note**: This can sometimes result in loading more data than necessary, depending on the dataset.
+
+### Summary of Differences
+
+- **Filtering and Efficiency**:
+  - `joins`: Efficient for filtering based on associated table conditions. Does not load associations into memory.
+  - `includes`: Used for eager loading to avoid N+1 queries. Loads associations into memory but can result in more data being loaded.
+
+- **Loading Associations**:
+  - `joins`: Associations are not loaded. Accessing `user.posts` will trigger additional queries.
+  - `includes`: Associations are loaded. Accessing `user.posts` does not trigger additional queries.
+
+### When to Use Each
+
+- **Use `joins` when**:
+  - You need to filter or sort records based on associated table conditions.
+  - You do not need the associated objects in memory.
+
+- **Use `includes` when**:
+  - You need to access associated objects frequently.
+  - You want to avoid the N+1 query problem.
+
+### Example Scenario Comparison
+
+#### Scenario: Display users with their published posts
+
+- **Using `joins`**:
+
+    ```ruby
+    users = User.joins(:posts).where(posts: { published: true })
+    users.each do |user|
+      puts user.name
+      user.posts.where(published: true).each do |post|
+        puts post.title
+      end
+    end
+    ```
+
+    - **Behavior**: Efficient filtering of users with published posts. However, accessing `user.posts` triggers additional queries for each user.
+
+- **Using `includes`**:
+
+    ```ruby
+    users = User.includes(:posts).where(posts: { published: true })
+    users.each do |user|
+      puts user.name
+      user.posts.each do |post|
+        puts post.title if post.published
+      end
+    end
+    ```
+
+    - **Behavior**: Avoids N+1 query problem by loading all associated posts in memory. Accessing `user.posts` does not trigger additional queries.
+
+By understanding these differences and scenarios, you can choose the appropriate method based on your query requirements and performance considerations.
